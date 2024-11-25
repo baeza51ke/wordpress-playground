@@ -111,6 +111,7 @@ export function isResourceReference(ref: any): ref is FileReference {
 
 export abstract class Resource<T extends File | Directory> {
 	/** Optional progress tracker to monitor progress */
+	// TODO: Why is this kept at the resource level and not just passed to resolve()?
 	protected _progress?: ProgressTracker;
 	get progress() {
 		return this._progress;
