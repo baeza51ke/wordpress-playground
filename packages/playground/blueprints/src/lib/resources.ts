@@ -3,7 +3,7 @@ import {
 	ProgressTracker,
 } from '@php-wasm/progress';
 import { FileTree, UniversalPHP } from '@php-wasm/universal';
-import { dirname, Semaphore } from '@php-wasm/util';
+import { dirname, joinPaths, Semaphore } from '@php-wasm/util';
 import {
 	listDescendantFiles,
 	listGitFiles,
@@ -287,6 +287,50 @@ export class VFSDirectoryResource extends Resource<Directory> {
 	/** @inheritDoc */
 	get name() {
 		return this.reference.path.split('/').pop() || '';
+	}
+}
+
+export class BlueprintAssetResource extends VFSResource {
+	constructor(
+		private originalReference: BlueprintAssetReference,
+		public override _progress?: ProgressTracker
+	) {
+		const vfsReference: VFSReference = {
+			resource: 'vfs',
+			path: joinPaths(
+				// TODO: This should be at least a constant if we're not using a path mapping function for Blueprint assets.
+				'/internal/shared/blueprint-assets',
+				originalReference.path
+			),
+		};
+		super(vfsReference, _progress);
+	}
+
+	/** @inheritDoc */
+	override get name() {
+		return this.originalReference.path.split('/').pop() || '';
+	}
+}
+
+export class BlueprintAssetDirectoryResource extends VFSDirectoryResource {
+	constructor(
+		private originalReference: BlueprintAssetDirectoryReference,
+		public override _progress?: ProgressTracker
+	) {
+		const vfsReference: VFSReference = {
+			resource: 'vfs',
+			path: joinPaths(
+				// TODO: This should be at least a constant if we're not using a path mapping function for Blueprint assets.
+				'/internal/shared/blueprint-assets',
+				originalReference.path
+			),
+		};
+		super(vfsReference, _progress);
+	}
+
+	/** @inheritDoc */
+	override get name() {
+		return this.originalReference.path.split('/').pop() || '';
 	}
 }
 

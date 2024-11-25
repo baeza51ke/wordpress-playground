@@ -10,8 +10,10 @@ export interface WriteFilesOptions {
 }
 
 // TODO: Consider supporting promised values for content so we can make a lazy version of FileTree
-export interface FileTree
-	extends Record<string, Uint8Array | string | FileTree> {}
+type FileContent = Uint8Array | string | FileTree;
+type MaybePromise<T> = T | Promise<T>;
+
+export interface FileTree extends Record<string, MaybePromise<FileContent>> {}
 
 /**
  * Writes multiple files to a specified directory in the Playground
@@ -33,7 +35,7 @@ export interface FileTree
 export async function writeFiles(
 	php: UniversalPHP,
 	root: string,
-	newFiles: FileTree,
+	newFiles: MaybePromise<FileTree>,
 	{ rmRoot = false }: WriteFilesOptions = {}
 ) {
 	if (rmRoot) {
@@ -49,7 +51,8 @@ export async function writeFiles(
 		if (content instanceof Uint8Array || typeof content === 'string') {
 			await php.writeFile(filePath, content);
 		} else {
-			await writeFiles(php, filePath, content);
+			const fileTreeContent = content as MaybePromise<FileTree>;
+			await writeFiles(php, filePath, fileTreeContent);
 		}
 	}
 }
