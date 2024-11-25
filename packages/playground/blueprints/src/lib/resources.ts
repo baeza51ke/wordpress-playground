@@ -271,6 +271,38 @@ export class VFSResource extends Resource<File> {
 	}
 }
 
+export class VFSDirectoryResource extends Resource<Directory> {
+	constructor(
+		private reference: VFSReference,
+		public override _progress?: ProgressTracker
+	) {
+		super();
+	}
+
+	async resolve() {
+		return Promise.reject('Not implemented');
+	}
+
+	/** @inheritDoc */
+	get name() {
+		return this.reference.path.split('/').pop() || '';
+	}
+}
+
+// export class LazyVFSFileTree extends Proxy implements FileTree {
+// 	#root: string;
+
+// 	constructor(root: string) {
+// 		this.#root = root;
+// 		super({}, {
+// 			ownKeys() {
+
+// 			}
+// 		})
+// 	}
+
+// }
+
 /**
  * A `Resource` that represents a literal file.
  */
