@@ -85,7 +85,8 @@ class WP_Import_Session {
                 ),
                 'meta_input' => array(
                     'data_source' => $args['data_source'],
-                    'started_at' => current_time('mysql'),
+                    'started_at' => current_time('timestamp'),
+                    'file_name' => $args['file_name'] ?? null,
                     'source_url' => $args['source_url'] ?? null,
                     'attachment_id' => $args['attachment_id'] ?? null,
                 ),
@@ -133,6 +134,7 @@ class WP_Import_Session {
     public static function get_active() {
         $posts = get_posts(array(
             'post_type' => self::POST_TYPE,
+            'post_status' => array('publish'),
             'posts_per_page' => 1,
             'orderby' => 'date',
             'order' => 'DESC',
@@ -153,7 +155,7 @@ class WP_Import_Session {
         return new self($posts[0]->ID);
     }
 
-    private function __construct($post_id) {
+    public function __construct($post_id) {
         $this->post_id = $post_id;
     }
 
@@ -168,10 +170,33 @@ class WP_Import_Session {
 
     public function get_metadata() {
         return [
+            'cursor' => $this->get_reentrancy_cursor() ?: null,
             'data_source' => get_post_meta($this->post_id, 'data_source', true),
             'source_url' => get_post_meta($this->post_id, 'source_url', true),
             'attachment_id' => get_post_meta($this->post_id, 'attachment_id', true),
         ];
+    }
+
+    public function get_data_source() {
+        return get_post_meta($this->post_id, 'data_source', true);
+    }
+
+    public function get_human_readable_file_reference() {
+        switch($this->get_data_source()) {
+            case 'wxr_file':
+                case 'markdown_zip':
+                return get_post_meta($this->post_id, 'file_name', true);
+            case 'wxr_url':
+                return get_post_meta($this->post_id, 'source_url', true);
+        }
+        return '';
+    }
+
+    public function archive() {
+        wp_update_post(array(
+            'ID' => $this->post_id,
+            'post_status' => 'archived',
+        ));
     }
 
     /**
@@ -316,7 +341,7 @@ class WP_Import_Session {
      */
     public function get_stage() {
         if(!isset($this->cached_stage)) {
-            $this->cached_stage = get_post_meta($this->post_id, 'current_stage', true);
+            $this->cached_stage = get_post_meta($this->post_id, 'current_stage', true) ?: WP_Stream_Importer::STAGE_INITIAL;
         }
         return $this->cached_stage;
     }
@@ -327,8 +352,25 @@ class WP_Import_Session {
      * @param string $stage The new stage
      */
     public function set_stage($stage) {
+        if($stage === $this->get_stage()) {
+            return;
+        }
+        if(WP_Stream_Importer::STAGE_FINISHED === $stage) {
+            update_post_meta($this->post_id, 'finished_at', current_time('timestamp'));
+        }
         update_post_meta($this->post_id, 'current_stage', $stage);
         $this->cached_stage = $stage;
+    }
+
+    public function get_time_taken() {
+        $started_at = get_post_meta($this->post_id, 'started_at', true);
+        $finished_at = get_post_meta($this->post_id, 'finished_at', true) ?: current_time('timestamp');
+        if(empty($started_at)) {
+            return null;
+        }
+        $started_at = (int) $started_at;
+        $finished_at = (int) $finished_at;
+        return $finished_at - $started_at;
     }
 
     /**
@@ -346,7 +388,9 @@ class WP_Import_Session {
      * @param string $cursor The new cursor data
      */
     public function set_reentrancy_cursor($cursor) {
-        update_post_meta($this->post_id, 'importer_cursor', $cursor);
+        // WordPress, sadly, removes single slashes from the meta value and
+        // requires an addslashes() call to preserve them.
+        update_post_meta($this->post_id, 'importer_cursor', addslashes($cursor));
     }
 
 }
