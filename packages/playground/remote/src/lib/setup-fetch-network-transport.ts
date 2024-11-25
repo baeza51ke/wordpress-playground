@@ -72,7 +72,12 @@ export async function handleRequest(data: RequestData, fetchFn = fetch) {
 	try {
 		const fetchMethod = data.method || 'GET';
 		const fetchHeaders = data.headers || {};
-		if (fetchMethod == 'POST') {
+
+		const lowercasedHeaders = new Map<string, string>();
+		for (const [key, value] of Object.entries(fetchHeaders)) {
+			lowercasedHeaders.set(key.toLowerCase(), value);
+		}
+		if (fetchMethod == 'POST' && !lowercasedHeaders.has('content-type')) {
 			fetchHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
 		}
 
