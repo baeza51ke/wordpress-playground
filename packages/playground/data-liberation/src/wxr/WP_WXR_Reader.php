@@ -365,14 +365,13 @@ class WP_WXR_Reader implements Iterator {
 			$reader->connect_upstream( $upstream );
 			if ( null !== $cursor ) {
 				if ( ! isset( $cursor['upstream'] ) ) {
-					_doing_it_wrong(
-						__METHOD__,
-						'Invalid cursor provided for WP_WXR_Reader::create(). The upstream offset was missing.',
-						null
-					);
-					return false;
+					// No upstream cursor means we've processed the
+					// entire input stream.
+					$xml->input_finished();
+					$xml->next_token();
+				} else {
+					$upstream->seek( $cursor['upstream'] );
 				}
-				$upstream->seek( $cursor['upstream'] );
 			}
 		}
 		return $reader;

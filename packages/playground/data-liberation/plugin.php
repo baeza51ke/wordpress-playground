@@ -261,14 +261,13 @@ function data_liberation_admin_page() {
                         <?php break; ?>
                         <?php case WP_Stream_Importer::STAGE_FRONTLOAD_ASSETS: ?>
                             <h3>Downloading Assets</h3>
-
-                            <progress value="<?php echo $imported['file'] ?? 0; ?>" max="<?php echo $totals['file'] ?? 0; ?>">
-                                <?php echo $imported['file'] ?? 0; ?> / <?php echo $totals['file'] ?? 0; ?> Files Downloaded
-                            </progress>
                             
-                            <h4>Downloads in progress:</h4>
                             <?php $frontloading_progress = $import_session->get_frontloading_progress();
                             if (!empty($frontloading_progress)): ?>
+                                <progress value="<?php echo $imported['file'] ?? 0; ?>" max="<?php echo $totals['file'] ?? 0; ?>">
+                                    <?php echo $imported['file'] ?? 0; ?> / <?php echo $totals['file'] ?? 0; ?> Files Downloaded
+                                </progress>
+                                <h4>Downloads in progress:</h4>
                                 <table>
                                     <thead>
                                         <tr>
@@ -285,6 +284,8 @@ function data_liberation_admin_page() {
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
+                            <?php else: ?>
+                                <p>Preparing to download assets...</p>
                             <?php endif; ?>
                         <?php break; ?>
                         <?php case WP_Stream_Importer::STAGE_IMPORT_ENTITIES: ?>
@@ -413,10 +414,10 @@ function data_liberation_admin_page() {
                 <th scope="row">Status</th>
             </tr>
             <?php
+            // @TODO: Paginate.
             $import_session_posts = get_posts(array(
                 'post_type' => WP_Import_Session::POST_TYPE,
-                'post_status' => array('publish', 'stopped', 'archived'),
-                // @TODO: Paginate.
+                'post_status' => array('archived'),
                 'posts_per_page' => -1,
                 'orderby' => 'date',
                 'order' => 'DESC',
@@ -574,41 +575,56 @@ function data_liberation_process_import() {
 add_action('data_liberation_process_import', 'data_liberation_process_import');
 
 function data_liberation_import_step($session) {
-    $importer = data_liberation_create_importer($session->get_metadata());
+    $metadata = $session->get_metadata();
+    $importer = data_liberation_create_importer($metadata);
     if(!$importer) {
         return;
     }
+    /**
+     * @TODO: Fix this error we get after a few steps:
+     * Notice:  Function WP_XML_Processor::step_in_element was called incorrectly. A tag was not closed. Please see Debugging in WordPress for more information. (This message was added in version WP_VERSION.) in /wordpress/wp-includes/functions.php on line 6114
+     */
 
-    do {
-        while($importer->next_step()) {
-            // var_dump("Stage: " . $importer->get_stage());
-            switch($importer->get_stage()) {
-                case WP_Stream_Importer::STAGE_INDEX_ENTITIES:
-                    // Bump the total number of entities to import.
-                    $session->bump_total_number_of_entities([
-                        ...$importer->get_indexed_entities_counts(),
-                        'file' => count($importer->get_indexed_assets_urls())
-                    ]);
-                    break;
-                case WP_Stream_Importer::STAGE_FRONTLOAD_ASSETS:
-                    $session->bump_frontloading_progress(
-                        $importer->get_frontloading_progress(),
-                        $importer->get_frontloading_events()
-                    );
-                    break;
-                case WP_Stream_Importer::STAGE_IMPORT_ENTITIES:
-                    $session->bump_imported_entities_counts(
-                        $importer->get_imported_entities_counts()
-                    );
-                    break;
-            }
+    // At this moment, the importer knows where to resume from but
+    // it hasn't actually pulled the first entity from the stream yet.
+    // So let's do that now.
+    if($importer->next_step()) {
+        // var_dump("Stage: " . $importer->get_stage());
+        switch($importer->get_stage()) {
+            case WP_Stream_Importer::STAGE_INDEX_ENTITIES:
+                // Bump the total number of entities to import.
+                var_dump($importer->get_indexed_entities_counts());
+                $session->bump_total_number_of_entities([
+                    ...$importer->get_indexed_entities_counts(),
+                    'file' => count($importer->get_indexed_assets_urls())
+                ]);
+                break;
+            case WP_Stream_Importer::STAGE_FRONTLOAD_ASSETS:
+                var_dump($importer->get_frontloading_progress());
+                var_dump($importer->get_frontloading_events());
+                $session->bump_frontloading_progress(
+                    $importer->get_frontloading_progress(),
+                    $importer->get_frontloading_events()
+                );
+                break;
+            case WP_Stream_Importer::STAGE_IMPORT_ENTITIES:
+                var_dump($importer->get_imported_entities_counts());
+                $session->bump_imported_entities_counts(
+                    $importer->get_imported_entities_counts()
+                );
+                break;
         }
+    }
+    // Move to the next step before saving the cursor so that the next
+    // import session resumes from the next step.
+    $importer->next_step();
+    if($importer->advance_to_next_stage()) {
         $session->set_stage($importer->get_stage());
-        $cursor = $importer->get_reentrancy_cursor();
-        if($cursor) {
-            $session->set_reentrancy_cursor($cursor);
-        }
-    } while($importer->advance_to_next_stage());
+    }
+    $cursor = $importer->get_reentrancy_cursor();
+    if($cursor) {
+        $session->set_reentrancy_cursor($cursor);
+    }
 }
 
 function data_liberation_create_importer($import) {

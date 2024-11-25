@@ -684,6 +684,7 @@ class WP_XML_Processor {
 		return base64_encode(
 			json_encode(
 				array(
+					'is_finished' => $this->is_finished(),
 					'upstream_bytes_forgotten' => $this->upstream_bytes_forgotten,
 					'parser_context' => $this->parser_context,
 					'stack_of_open_elements' => $this->stack_of_open_elements,
@@ -722,6 +723,9 @@ class WP_XML_Processor {
 		if ( false === $cursor ) {
 			_doing_it_wrong( __METHOD__, 'Invalid cursor provided to initialize_from_cursor().', '1.0.0' );
 			return false;
+		}
+		if ( $cursor['is_finished'] ) {
+			$this->parser_state = self::STATE_COMPLETE;
 		}
 		// Assume the input stream will start from the last known byte offset.
 		$this->bytes_already_parsed     = 0;
