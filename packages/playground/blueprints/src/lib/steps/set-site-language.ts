@@ -1,10 +1,7 @@
 import { StepHandler } from '.';
 import { unzipFile } from '@wp-playground/common';
 import { logger } from '@php-wasm/logger';
-import {
-	LatestMinifiedWordPressVersion,
-	MinifiedWordPressVersions,
-} from '@wp-playground/wordpress-builds';
+import { resolveWordPressRelease } from '@wp-playground/wordpress';
 
 /**
  * @inheritDoc setSiteLanguage
@@ -25,48 +22,74 @@ export interface SetSiteLanguageStep {
 }
 
 /**
- * Returns the URL to download a WordPress translation package.
+ * Infers the translation package URL for a given WordPress version.
  *
- * If the WordPress version doesn't have a translation package,
- * the latest "RC" version will be used instead.
+ * If it cannot be inferred, the latest translation package will be used instead.
  */
-export const getWordPressTranslationUrl = (
+export const getWordPressTranslationUrl = async (
 	wpVersion: string,
 	language: string,
-	latestBetaVersion: string = MinifiedWordPressVersions['beta'],
-	latestMinifiedVersion: string = LatestMinifiedWordPressVersion
+	latestBetaWordPressVersion?: string,
+	latestStableWordPressVersion?: string
 ) => {
 	/**
-	 * The translation API provides translations for all WordPress releases
-	 * including patch releases.
+	 * Infer a WordPress version we can feed into the translations API based
+	 * on the requested fully-qualified WordPress version.
 	 *
-	 * RC and beta versions don't have individual translation packages.
-	 * They all share the same "RC" translation package.
+	 * The translation API provides translations for:
 	 *
-	 * Nightly versions don't have a "nightly" translation package.
-	 * So, the best we can do is download the RC translation package,
-	 * because it contains the latest available translations.
+	 * - all major.minor WordPress releases
+	 * - all major.minor.patch WordPress releases
+	 * - Latest beta/RC version – under a label like "6.6-RC". It's always "-RC".
+	 *   There's no "-BETA1", "-RC1", "-RC2", etc.
 	 *
-	 * The WordPress.org translation API uses "RC" instead of
-	 * "RC1", "RC2", "BETA1", "BETA2", etc.
+	 * The API does not provide translations for "nightly", "latest", or
+	 * old beta/RC versions.
 	 *
 	 * For example translations for WordPress 6.6-BETA1 or 6.6-RC1 are found under
 	 * https://downloads.wordpress.org/translation/core/6.6-RC/en_GB.zip
 	 */
+	let resolvedVersion = null;
 	if (wpVersion.match(/^(\d.\d(.\d)?)-(alpha|beta|nightly|rc).*$/i)) {
-		wpVersion = latestBetaVersion
+		// Translate "6.4-alpha", "6.5-beta", "6.6-nightly", "6.6-RC" etc.
+		// to "6.6-RC"
+		if (latestBetaWordPressVersion) {
+			resolvedVersion = latestBetaWordPressVersion;
+		} else {
+			const resolved = await resolveWordPressRelease('beta');
+			resolvedVersion = resolved!.version;
+		}
+		resolvedVersion = resolvedVersion
 			// Remove the patch version, e.g. 6.6.1-RC1 -> 6.6-RC1
 			.replace(/^(\d.\d)(.\d+)/i, '$1')
 			// Replace "rc" and "beta" with "RC", e.g. 6.6-nightly -> 6.6-RC
 			.replace(/(rc|beta).*$/i, 'RC');
-	} else if (!wpVersion.match(/^(\d+\.\d+)(?:\.\d+)?$/)) {
+	} else if (wpVersion.match(/^(\d+\.\d+)(?:\.\d+)?$/)) {
+		// Use the version directly if it's a major.minor or major.minor.patch.
+		resolvedVersion = wpVersion;
+	} else {
 		/**
-		 * If the WordPress version string isn't a major.minor or major.minor.patch,
-		 * the latest available WordPress build version will be used instead.
+		 * Use the latest stable version otherwise.
+		 *
+		 * We could actually fail at this point, but we'll take a wild guess instead
+		 * and fall back to translations from the last official WordPress version.
+		 *
+		 * That may not always be useful. Let's reconsider this whenever someone
+		 * reports a related issue.
 		 */
-		wpVersion = latestMinifiedVersion;
+		if (latestStableWordPressVersion) {
+			resolvedVersion = latestStableWordPressVersion;
+		} else {
+			const resolved = await resolveWordPressRelease('latest');
+			resolvedVersion = resolved!.version;
+		}
 	}
-	return `https://downloads.wordpress.org/translation/core/${wpVersion}/${language}.zip`;
+	if (!resolvedVersion) {
+		throw new Error(
+			`WordPress version ${wpVersion} is not supported by the setSiteLanguage step`
+		);
+	}
+	return `https://downloads.wordpress.org/translation/core/${resolvedVersion}/${language}.zip`;
 };
 
 /**
@@ -94,7 +117,7 @@ export const setSiteLanguage: StepHandler<SetSiteLanguageStep> = async (
 
 	const translations = [
 		{
-			url: getWordPressTranslationUrl(wpVersion, language),
+			url: await getWordPressTranslationUrl(wpVersion, language),
 			type: 'core',
 		},
 	];
