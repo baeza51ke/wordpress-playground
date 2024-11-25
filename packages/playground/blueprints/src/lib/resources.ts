@@ -79,6 +79,7 @@ export type BlueprintAssetDirectoryReference = {
 };
 
 export interface Directory {
+	// TODO: I think FileTree contains data that is already read. Can/should we have this lazily read instead?
 	files: FileTree;
 	name: string;
 }

@@ -9,6 +9,7 @@ export interface WriteFilesOptions {
 	rmRoot?: boolean;
 }
 
+// TODO: Consider supporting promised values for content so we can make a lazy version of FileTree
 export interface FileTree
 	extends Record<string, Uint8Array | string | FileTree> {}
 
