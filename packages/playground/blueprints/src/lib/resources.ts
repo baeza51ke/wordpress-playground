@@ -65,6 +65,19 @@ export type GitDirectoryReference = {
 	/** The path to the directory in the git repository */
 	path: string;
 };
+export type BlueprintAssetReference = {
+	/** Identifies the file resource as a Blueprint Asset */
+	resource: 'blueprint-asset';
+	/** The path to the file in the Blueprint package */
+	path: string;
+};
+export type BlueprintAssetDirectoryReference = {
+	/** Identifies the directory resource as a Blueprint Asset */
+	resource: 'blueprint-asset:directory';
+	/** The path to the directory in the Blueprint package */
+	path: string;
+};
+
 export interface Directory {
 	files: FileTree;
 	name: string;
@@ -79,11 +92,13 @@ export type FileReference =
 	| LiteralReference
 	| CoreThemeReference
 	| CorePluginReference
-	| UrlReference;
+	| UrlReference
+	| BlueprintAssetReference;
 
 export type DirectoryReference =
 	| GitDirectoryReference
-	| DirectoryLiteralReference;
+	| DirectoryLiteralReference
+	| BlueprintAssetDirectoryReference;
 
 export function isResourceReference(ref: any): ref is FileReference {
 	return (
@@ -166,6 +181,12 @@ export abstract class Resource<T extends File | Directory> {
 				break;
 			case 'literal:directory':
 				resource = new LiteralDirectoryResource(ref, progress);
+				break;
+			case 'blueprint-asset':
+				resource = new BlueprintAssetResource(ref, progress);
+				break;
+			case 'blueprint-asset:directory':
+				resource = new BlueprintAssetDirectoryResource(ref, progress);
 				break;
 			default:
 				throw new Error(`Invalid resource: ${ref}`);
