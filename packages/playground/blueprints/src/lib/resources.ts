@@ -281,7 +281,12 @@ export class VFSDirectoryResource extends Resource<Directory> {
 	}
 
 	async resolve() {
-		return Promise.reject('Not implemented');
+		const name = this.name;
+		const files = await createLazyVFSFileTree(
+			this.reference.path,
+			this.playground!
+		);
+		return { name, files };
 	}
 
 	/** @inheritDoc */
@@ -334,19 +339,37 @@ export class BlueprintAssetDirectoryResource extends VFSDirectoryResource {
 	}
 }
 
-// export class LazyVFSFileTree extends Proxy implements FileTree {
-// 	#root: string;
+export async function createLazyVFSFileTree(
+	path: string,
+	playground: UniversalPHP
+): Promise<FileTree> {
+	const keys = await playground.listFiles(path);
+	const keySet = new Set(keys);
 
-// 	constructor(root: string) {
-// 		this.#root = root;
-// 		super({}, {
-// 			ownKeys() {
+	return new Proxy<FileTree>(
+		{},
+		{
+			ownKeys() {
+				return keys;
+			},
+			async get(target, prop: string) {
+				if (!keySet.has(prop)) {
+					return undefined;
+				}
+				const fullPath = joinPaths(path, prop);
+				if (!(await playground.fileExists(fullPath))) {
+					return undefined;
+				}
 
-// 			}
-// 		})
-// 	}
-
-// }
+				if (await playground.isDir(fullPath)) {
+					return createLazyVFSFileTree(fullPath, playground);
+				} else {
+					return playground.readFileAsBuffer(joinPaths(path, prop));
+				}
+			},
+		}
+	);
+}
 
 /**
  * A `Resource` that represents a literal file.
