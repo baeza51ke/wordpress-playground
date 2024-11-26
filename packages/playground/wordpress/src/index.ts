@@ -1,6 +1,6 @@
 import { PHP, UniversalPHP } from '@php-wasm/universal';
 import { joinPaths, phpVar } from '@php-wasm/util';
-import { unzipFile } from '@wp-playground/common';
+import { unzipFile, createMemoizedFetch } from '@wp-playground/common';
 export { bootWordPress, getFileNotFoundActionForWordPress } from './boot';
 export { getLoadedWordPressVersion } from './version-detect';
 
@@ -546,6 +546,8 @@ function isCleanDirContainingSiteMetadata(path: string, php: PHP) {
 	return false;
 }
 
+const memoizedFetch = createMemoizedFetch(fetch);
+
 /**
  * Resolves a specific WordPress release URL and version string based on
  * a version query string such as "latest", "beta", or "6.6".
@@ -591,9 +593,10 @@ export async function resolveWordPressRelease(versionQuery = 'latest') {
 		};
 	}
 
-	let latestVersions = await fetch(
+	const response = await memoizedFetch(
 		'https://api.wordpress.org/core/version-check/1.7/?channel=beta'
-	).then((res) => res.json());
+	);
+	let latestVersions = await response.json();
 
 	latestVersions = latestVersions.offers.filter(
 		(v: any) => v.response === 'autoupdate'

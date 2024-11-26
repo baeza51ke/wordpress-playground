@@ -2,6 +2,7 @@ import { StepHandler } from '.';
 import { unzipFile } from '@wp-playground/common';
 import { logger } from '@php-wasm/logger';
 import { resolveWordPressRelease } from '@wp-playground/wordpress';
+import { Semaphore } from '@php-wasm/util';
 
 /**
  * @inheritDoc setSiteLanguage
@@ -50,13 +51,21 @@ export const getWordPressTranslationUrl = async (
 	 * https://downloads.wordpress.org/translation/core/6.6-RC/en_GB.zip
 	 */
 	let resolvedVersion = null;
-	if (wpVersion.match(/^(\d.\d(.\d)?)-(alpha|beta|nightly|rc).*$/i)) {
+	if (wpVersion.match(/^(\d+\.\d+)(?:\.\d+)?$/)) {
+		// Use the version directly if it's a major.minor or major.minor.patch.
+		resolvedVersion = wpVersion;
+	} else if (wpVersion.match(/^(\d.\d(.\d)?)-(beta|rc).*$/i)) {
 		// Translate "6.4-alpha", "6.5-beta", "6.6-nightly", "6.6-RC" etc.
 		// to "6.6-RC"
 		if (latestBetaWordPressVersion) {
 			resolvedVersion = latestBetaWordPressVersion;
 		} else {
-			const resolved = await resolveWordPressRelease('beta');
+			let resolved = await resolveWordPressRelease('beta');
+			// Beta versions are only available during the beta period –
+			// let's use the latest stable release as a fallback.
+			if (resolved.source !== 'api') {
+				resolved = await resolveWordPressRelease('latest');
+			}
 			resolvedVersion = resolved!.version;
 		}
 		resolvedVersion = resolvedVersion
@@ -64,17 +73,14 @@ export const getWordPressTranslationUrl = async (
 			.replace(/^(\d.\d)(.\d+)/i, '$1')
 			// Replace "rc" and "beta" with "RC", e.g. 6.6-nightly -> 6.6-RC
 			.replace(/(rc|beta).*$/i, 'RC');
-	} else if (wpVersion.match(/^(\d+\.\d+)(?:\.\d+)?$/)) {
-		// Use the version directly if it's a major.minor or major.minor.patch.
-		resolvedVersion = wpVersion;
 	} else {
 		/**
 		 * Use the latest stable version otherwise.
 		 *
-		 * We could actually fail at this point, but we'll take a wild guess instead
-		 * and fall back to translations from the last official WordPress version.
-		 *
-		 * That may not always be useful. Let's reconsider this whenever someone
+		 * The requested version is either nightly alpha or a custom string.
+		 * We could actually fail at this point, but it seems more useful to
+		 * download translations from the last official WordPress version.
+		 * If that assumption is wrong, let's reconsider this whenever someone
 		 * reports a related issue.
 		 */
 		if (latestStableWordPressVersion) {
@@ -188,43 +194,53 @@ export const setSiteLanguage: StepHandler<SetSiteLanguageStep> = async (
 		await playground.mkdir(`${docroot}/wp-content/languages/themes`);
 	}
 
-	for (const { url, type } of translations) {
-		try {
-			const response = await fetch(url);
-			if (!response.ok) {
-				throw new Error(
-					`Failed to download translations for ${type}: ${response.statusText}`
+	// Fetch translations in parallel
+	const fetchQueue = new Semaphore({ concurrency: 5 });
+	const translationsQueue = translations.map(({ url, type }) =>
+		fetchQueue.run(async () => {
+			try {
+				const response = await fetch(url);
+				if (!response.ok) {
+					throw new Error(
+						`Failed to download translations for ${type}: ${response.statusText}`
+					);
+				}
+
+				let destination = `${docroot}/wp-content/languages`;
+				if (type === 'plugin') {
+					destination += '/plugins';
+				} else if (type === 'theme') {
+					destination += '/themes';
+				}
+
+				await unzipFile(
+					playground,
+					new File(
+						[await response.blob()],
+						`${language}-${type}.zip`
+					),
+					destination
+				);
+			} catch (error) {
+				/**
+				 * If a core translation wasn't found we should throw an error because it
+				 * means the language is not supported or the language code isn't correct.
+				 */
+				if (type === 'core') {
+					throw new Error(
+						`Failed to download translations for WordPress. Please check if the language code ${language} is correct. You can find all available languages and translations on https://translate.wordpress.org/.`
+					);
+				}
+				/**
+				 * Some languages don't have translations for themes and plugins and will
+				 * return a 404 and a CORS error. In this case, we can just skip the
+				 * download because Playground can still work without them.
+				 */
+				logger.warn(
+					`Error downloading translations for ${type}: ${error}`
 				);
 			}
-
-			let destination = `${docroot}/wp-content/languages`;
-			if (type === 'plugin') {
-				destination += '/plugins';
-			} else if (type === 'theme') {
-				destination += '/themes';
-			}
-
-			await unzipFile(
-				playground,
-				new File([await response.blob()], `${language}-${type}.zip`),
-				destination
-			);
-		} catch (error) {
-			/**
-			 * If a core translation wasn't found we should throw an error because it
-			 * means the language is not supported or the language code isn't correct.
-			 */
-			if (type === 'core') {
-				throw new Error(
-					`Failed to download translations for WordPress. Please check if the language code ${language} is correct. You can find all available languages and translations on https://translate.wordpress.org/.`
-				);
-			}
-			/**
-			 * Some languages don't have translations for themes and plugins and will
-			 * return a 404 and a CORS error. In this case, we can just skip the
-			 * download because Playground can still work without them.
-			 */
-			logger.warn(`Error downloading translations for ${type}: ${error}`);
-		}
-	}
+		})
+	);
+	await Promise.all(translationsQueue);
 };
