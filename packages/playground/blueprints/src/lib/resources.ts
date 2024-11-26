@@ -2,7 +2,7 @@ import {
 	cloneResponseMonitorProgress,
 	ProgressTracker,
 } from '@php-wasm/progress';
-import { FileTree, UniversalPHP } from '@php-wasm/universal';
+import { FileTree, FileTreeAsync, UniversalPHP } from '@php-wasm/universal';
 import { dirname, joinPaths, Semaphore } from '@php-wasm/util';
 import {
 	listDescendantFiles,
@@ -22,6 +22,12 @@ export const ResourceTypes = [
 ] as const;
 
 export type VFSReference = {
+	/** Identifies the file resource as Virtual File System (VFS) */
+	resource: 'vfs';
+	/** The path to the file in the VFS */
+	path: string;
+};
+export type VFSDirectoryReference = {
 	/** Identifies the file resource as Virtual File System (VFS) */
 	resource: 'vfs';
 	/** The path to the file in the VFS */
@@ -79,13 +85,14 @@ export type BlueprintAssetDirectoryReference = {
 };
 
 export interface Directory {
-	// TODO: I think FileTree contains data that is already read. Can/should we have this lazily read instead?
-	files: FileTree;
+	files: FileTreeAsync;
 	name: string;
 }
-export type DirectoryLiteralReference = Directory & {
+export type DirectoryLiteralReference = {
 	/** Identifies the file resource as a git directory */
 	resource: 'literal:directory';
+	files: FileTree;
+	name: string;
 };
 
 export type FileReference =
@@ -99,6 +106,7 @@ export type FileReference =
 export type DirectoryReference =
 	| GitDirectoryReference
 	| DirectoryLiteralReference
+	| VFSDirectoryReference
 	| BlueprintAssetDirectoryReference;
 
 export function isResourceReference(ref: any): ref is FileReference {
@@ -339,7 +347,8 @@ export class BlueprintAssetDirectoryResource extends VFSDirectoryResource {
 	}
 }
 
-export async function createLazyVFSFileTree(
+// TODO: Should we export this?
+async function createLazyVFSFileTree(
 	path: string,
 	playground: UniversalPHP
 ): Promise<FileTree> {
