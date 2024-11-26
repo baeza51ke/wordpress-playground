@@ -73,6 +73,11 @@ class WP_Stream_Importer {
 	private $active_downloads = array();
 	private $downloader;
 
+	/**
+	 * @var WP_Topological_Sorter
+	 */
+	private $topological_sorter;
+
 	public static function create_for_wxr_file( $wxr_path, $options = array(), $cursor = null ) {
 		return static::create(
 			function ( $cursor = null ) use ( $wxr_path ) {
@@ -241,8 +246,9 @@ class WP_Stream_Importer {
 	 */
 	private function next_frontloading_step() {
 		if ( null === $this->entity_iterator ) {
-			$this->entity_iterator = $this->create_entity_iterator();
-			$this->downloader      = new WP_Attachment_Downloader( $this->options );
+			$this->entity_iterator    = $this->create_entity_iterator();
+			$this->topological_sorter = new WP_Topological_Sorter();
+			$this->downloader         = new WP_Attachment_Downloader( $this->options );
 		}
 
 		$this->frontloading_advance_reentrancy_cursor();
@@ -253,11 +259,15 @@ class WP_Stream_Importer {
 			if ( ! empty( $this->active_downloads ) ) {
 				_doing_it_wrong( __METHOD__, 'Frontloading queue is not empty.', '1.0' );
 			}
-			$this->stage            = self::STAGE_IMPORT_ENTITIES;
-			$this->downloader       = null;
-			$this->active_downloads = array();
-			$this->entity_iterator  = null;
-			$this->resume_at_entity = null;
+
+			print_r( $this->topological_sorter->mapping );
+
+			$this->stage              = self::STAGE_IMPORT_ENTITIES;
+			$this->topological_sorter = null;
+			$this->downloader         = null;
+			$this->active_downloads   = array();
+			$this->entity_iterator    = null;
+			$this->resume_at_entity   = null;
 			return false;
 		}
 
@@ -288,14 +298,22 @@ class WP_Stream_Importer {
 		$cursor                            = $this->entity_iterator->get_reentrancy_cursor();
 		$this->active_downloads[ $cursor ] = array();
 
-		$data = $entity->get_data();
+		$data     = $entity->get_data();
+		$upstream = $this->entity_iterator->get_upstream();
+
 		switch ( $entity->get_type() ) {
+			case 'category':
+			case 'term':
+				$this->topological_sorter->map_term( $upstream, $data );
+				break;
 			case 'site_option':
 				if ( $data['option_name'] === 'home' ) {
 					$this->source_site_url = $data['option_value'];
 				}
 				break;
 			case 'post':
+				$this->topological_sorter->map_post( $upstream, $data );
+
 				if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
 					$this->enqueue_attachment_download( $data['attachment_url'], null );
 				} elseif ( isset( $data['post_content'] ) ) {

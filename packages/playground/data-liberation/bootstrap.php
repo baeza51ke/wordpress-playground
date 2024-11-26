@@ -55,6 +55,8 @@ require_once __DIR__ . '/src/import/WP_Attachment_Downloader.php';
 require_once __DIR__ . '/src/import/WP_Attachment_Downloader_Event.php';
 require_once __DIR__ . '/src/import/WP_Stream_Importer.php';
 require_once __DIR__ . '/src/import/WP_Markdown_Importer.php';
+require_once __DIR__ . '/src/import/WP_Logger.php';
+require_once __DIR__ . '/src/import/WP_Topological_Sorter.php';
 
 require_once __DIR__ . '/src/utf8_decoder.php';
 
