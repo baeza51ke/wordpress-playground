@@ -260,8 +260,6 @@ class WP_Stream_Importer {
 				_doing_it_wrong( __METHOD__, 'Frontloading queue is not empty.', '1.0' );
 			}
 
-			print_r( $this->topological_sorter->mapping );
-
 			$this->stage              = self::STAGE_IMPORT_ENTITIES;
 			$this->topological_sorter = null;
 			$this->downloader         = null;
