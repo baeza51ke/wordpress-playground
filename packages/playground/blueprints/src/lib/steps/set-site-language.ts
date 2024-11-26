@@ -223,8 +223,14 @@ export const setSiteLanguage: StepHandler<SetSiteLanguageStep> = async (
 				);
 			} catch (error) {
 				/**
-				 * If a core translation wasn't found we should throw an error because it
-				 * means the language is not supported or the language code isn't correct.
+				 * Throw an error when a core translation isn't found.
+				 *
+				 * The language slug used in the Blueprint is not recognized by the
+				 * WordPress.org API and will always return a 404. This is likely
+				 * unintentional – perhaps a typo or the API consumer guessed the
+				 * slug wrong.
+				 *
+				 * The least we can do is communicate the problem.
 				 */
 				if (type === 'core') {
 					throw new Error(
@@ -232,9 +238,11 @@ export const setSiteLanguage: StepHandler<SetSiteLanguageStep> = async (
 					);
 				}
 				/**
-				 * Some languages don't have translations for themes and plugins and will
-				 * return a 404 and a CORS error. In this case, we can just skip the
-				 * download because Playground can still work without them.
+				 * WordPress core has translations for the requested language,
+				 * but one of the installed plugins or themes doesn't.
+				 *
+				 * This is fine. Not all plugins and themes have translations for
+				 * every language. Let's just log a warning and move on.
 				 */
 				logger.warn(
 					`Error downloading translations for ${type}: ${error}`
