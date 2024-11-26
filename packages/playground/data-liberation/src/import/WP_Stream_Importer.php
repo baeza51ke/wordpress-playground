@@ -281,9 +281,8 @@ class WP_Stream_Importer {
 	 */
 	private function next_frontloading_step() {
 		if ( null === $this->entity_iterator ) {
-			$this->entity_iterator    = $this->create_entity_iterator();
-			$this->topological_sorter = new WP_Topological_Sorter();
-			$this->downloader         = new WP_Attachment_Downloader( $this->options );
+			$this->entity_iterator = $this->create_entity_iterator();
+			$this->downloader      = new WP_Attachment_Downloader( $this->options );
 		}
 
 		$this->frontloading_advance_reentrancy_cursor();
@@ -332,7 +331,6 @@ class WP_Stream_Importer {
 		$this->active_downloads[ $cursor ] = array();
 
 		$data = $entity->get_data();
-
 		switch ( $entity->get_type() ) {
 			case 'site_option':
 				if ( $data['option_name'] === 'home' ) {
@@ -379,8 +377,8 @@ class WP_Stream_Importer {
 	 */
 	private function import_next_entity() {
 		if ( null === $this->entity_iterator ) {
-			$this->downloader         = new WP_Attachment_Downloader( $this->options );
 			$this->entity_iterator    = $this->create_entity_iterator();
+			$this->importer           = new WP_Entity_Importer();
 			$this->topological_sorter = new WP_Topological_Sorter();
 		}
 
