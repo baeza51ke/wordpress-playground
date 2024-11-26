@@ -389,7 +389,7 @@ class WP_WXR_Reader implements Iterator {
 		$this->xml = $xml;
 	}
 
-	public function get_upstream() {
+	public function get_entity_byte_offset() {
 		return $this->entity_byte_offset;
 	}
 
