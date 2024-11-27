@@ -3,7 +3,7 @@
 use PHPUnit\Framework\TestCase;
 
 class WPWXRReaderTests extends TestCase {
-    
+
     /**
      * @dataProvider preexisting_wxr_files_provider
      */
@@ -42,7 +42,7 @@ class WPWXRReaderTests extends TestCase {
         $this->assertEquals($expected_entitys, $found_entities);
     }
 
-    public function preexisting_wxr_files_provider() {
+    public static function preexisting_wxr_files_provider() {
         return [
             [__DIR__ . '/wxr/a11y-unit-test-data.xml', 1043],
             [__DIR__ . '/wxr/crazy-cdata-escaped.xml', 5],
@@ -114,7 +114,7 @@ class WPWXRReaderTests extends TestCase {
             ],
             $importer->get_entity()->get_data()
         );
-        
+
         $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
